@@ -1,0 +1,5 @@
+{
+  "csvUrl": "https://docs.google.com/spreadsheets/d/e/2PACX-1vQmO1TyFl0IP5KwwzvcPHbZH0nH-QiPCWimgJ1NsE9un0axrYGZvVlKj8XiK13l8jcFyETVMLWSMWId/pub?gid=1290956906&single=true&output=csv",
+  "dayNames": ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"],
+  "dayOrder": [1, 2, 3, 4, 5, 6, 0]
+}

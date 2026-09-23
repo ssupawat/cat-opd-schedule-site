@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ตารางออกตรวจ</title>
+<meta name="description" content="ค้นหาตารางออกตรวจของแพทย์ ดูเวลาออกตรวจรายวันแยกตามแผนก อัปเดตจากระบบกลางอัตโนมัติ">
+<meta name="theme-color" content="#F2F6F5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1F22" media="(prefers-color-scheme: dark)">
+<meta property="og:title" content="ค้นหาตารางออกตรวจแพทย์">
+<meta property="og:description" content="ดูเวลาออกตรวจของแพทย์แต่ละท่าน แยกตามวันและแผนก">
+<meta property="og:type" content="website">
+<!-- Cat icon: Twemoji “cat face” by Twitter, licensed CC BY 4.0 (via Iconify) -->
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F6F5; --surface:#FFFFFF; --ink:#12343B; --muted:#5B7479;
+  --line:#D8E3E1; --accent:#1B7F6B; --today:#FFF4D6; --today-ink:#7A5A00;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0F1F22; --surface:#16292D; --ink:#E4EFED; --muted:#93AAAE;
+    --line:#26403F; --accent:#4CC3A6; --today:#3A3016; --today-ink:#F2D27A;
+  }
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Anuphan","Noto Sans Thai","Leelawadee UI","Thonburi",system-ui,sans-serif;
+  font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:640px;margin:0 auto;padding:20px 16px 48px}
+h1{font-size:1.5rem;line-height:1.3;margin:8px 0 4px;font-weight:700}
+.sub{color:var(--muted);margin:0 0 16px;font-size:.95rem}
+.search{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:8px 0 12px}
+.search input{width:100%;font:inherit;font-size:1.05rem;padding:14px 16px;border-radius:14px;
+  border:1.5px solid var(--line);background:var(--surface);color:var(--ink);outline:none}
+.search input:focus{border-color:var(--accent)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-top:10px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;font:inherit;font-size:.88rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.count{color:var(--muted);font-size:.85rem;margin:4px 0 8px}
+ul.list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+ul.list li{border-bottom:1px solid var(--line)}
+ul.list a{display:block;padding:14px 4px;color:inherit;text-decoration:none}
+ul.list a:focus-visible,.back:focus-visible,.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nm{font-weight:600}
+.sp{color:var(--muted);font-size:.9rem}
+.empty{padding:32px 4px;color:var(--muted)}
+.back{display:inline-block;font:inherit;background:none;border:0;color:var(--accent);padding:8px 0;cursor:pointer;font-weight:600;text-decoration:none}
+.head{margin:8px 0 20px}
+.meta{color:var(--muted);font-size:.92rem}
+table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:0}
+th{font-size:.85rem;color:var(--muted);font-weight:500}
+td.day{width:34%;font-weight:600}
+tr.is-today td{background:var(--today)}
+tr.is-today td.day::after{content:" (วันนี้)";font-weight:500;color:var(--today-ink);font-size:.85rem}
+.off{color:var(--muted)}
+.slot+.slot{margin-top:6px}
+.remark{margin-top:16px;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent)}
+.remark h2{margin:0 0 4px;font-size:.9rem;color:var(--muted);font-weight:600}
+.remark p{margin:0;white-space:pre-line}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<noscript><div class="wrap"><p class="empty">ต้องเปิดใช้ JavaScript จึงจะดูตารางออกตรวจได้</p></div></noscript>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+const CACHE_KEY="cat-opd-doctors-v2";
+
+let CSV_URL, DAYS, ORDER;
+const app = document.getElementById("app");
+const state = {q:"", spec:""};
+let DOCTORS = [];
+let UPDATED_AT = 0;
+
+const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const today = () => new Date().getDay();
+const fmtUpdated = ts => new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short"}).format(ts);
+const norm = s => String(s||"").toLowerCase().replace(/\s+/g,"");
+const cell = (r,k) => String(r[k]??"").trim();
+const hashId = s => { let h=5381; for(const c of s) h=(h*33 ^ c.codePointAt(0))>>>0; return "d"+h.toString(16); };
+
+function toDoctors(rows){
+  return rows.map(r=>{
+    const schedule=[];
+    DAYS.forEach((name,day)=>{
+      cell(r,name).split(",").map(t=>t.trim()).filter(Boolean).forEach(time=>schedule.push({day,time}));
+    });
+    return {id:hashId(cell(r,"ชื่อ")),name:cell(r,"ชื่อ"),spec:cell(r,"แผนก"),note:cell(r,"หมายเหตุ"),schedule};
+  }).filter(d=>d.name);
+}
+
+function match(d){
+  if(state.spec && d.spec!==state.spec) return false;
+  if(!state.q) return true;
+  const q = norm(state.q);
+  return [d.name,d.spec].some(f=>norm(f).includes(q));
+}
+
+function renderList(){
+  const specs=[...new Set(DOCTORS.map(d=>d.spec).filter(Boolean))];
+  app.innerHTML = `
+    <h1>ตารางออกตรวจแพทย์</h1>
+    <p class="sub">พิมพ์ชื่อแพทย์หรือแผนก แล้วแตะชื่อเพื่อดูตาราง</p>
+    <div class="search">
+      <input id="q" type="search" placeholder="ค้นหาชื่อแพทย์ หรือแผนก" value="${esc(state.q)}" autocomplete="off" aria-label="ค้นหาแพทย์">
+      <div class="chips" role="group" aria-label="กรองตามแผนก">
+        <button class="chip" data-spec="" aria-pressed="${!state.spec}">ทุกแผนก</button>
+        ${specs.map(s=>`<button class="chip" data-spec="${esc(s)}" aria-pressed="${state.spec===s}">${esc(s)}</button>`).join("")}
+      </div>
+    </div>
+    <div id="results"></div>`;
+  document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;renderResults()});
+  app.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
+    state.spec=b.dataset.spec;
+    app.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed",x.dataset.spec===state.spec));
+    renderResults();
+  }));
+  renderResults();
+}
+
+function renderResults(){
+  const list=DOCTORS.filter(match);
+  const el=document.getElementById("results");
+  if(!list.length){el.innerHTML=`<p class="empty">ไม่พบแพทย์ที่ตรงกับ "${esc(state.q)}" ลองค้นด้วยชื่อจริงหรือชื่อแผนก</p>`;return}
+  el.innerHTML=`<p class="count">พบ ${list.length} คน${UPDATED_AT?` · อัปเดต ${fmtUpdated(UPDATED_AT)}`:""}</p><ul class="list">${list.map(d=>`
+    <li><a href="#${d.id}">
+      <span class="nm">${esc(d.name)}</span><br><span class="sp">${esc(d.spec)}</span>
+    </a></li>`).join("")}</ul>`;
+}
+
+function renderDoctor(d){
+  const t=today();
+  const rows=ORDER.map(day=>{
+    const slots=d.schedule.filter(s=>s.day===day);
+    return `<tr class="${day===t?"is-today":""}"><td class="day">${DAYS[day]}</td><td>${
+      slots.length?slots.map(s=>`<div class="slot">${esc(s.time)} น.</div>`).join("")
+      :'<span class="off">ไม่มีตรวจ</span>'}</td></tr>`;
+  }).join("");
+  app.innerHTML=`
+    <a class="back" href="#">‹ กลับไปค้นหา</a>
+    <div class="head">
+      <div><h1>${esc(d.name)}</h1><div class="meta">${esc(d.spec)}</div></div>
+    </div>
+    <table><thead><tr><th>วัน</th><th>เวลา</th></tr></thead><tbody>${rows}</tbody></table>
+    ${d.note?`<div class="remark"><h2>หมายเหตุ</h2><p>${esc(d.note)}</p></div>`:""}`;
+  window.scrollTo(0,0);
+}
+
+function route(){
+  const d=DOCTORS.find(x=>x.id===location.hash.slice(1));
+  if(d) renderDoctor(d); else renderList();
+}
+
+async function fetchDoctors(){
+  const res=await fetch(CSV_URL);
+  if(!res.ok) throw new Error("HTTP "+res.status);
+  const text=await res.text();
+  if(text.trimStart().startsWith("<")) throw new Error("ได้ HTML แทน CSV: ตรวจว่า publish ชีตแล้ว");
+  return toDoctors(Papa.parse(text,{header:true,skipEmptyLines:true}).data);
+}
+
+async function refresh(showLoading){
+  if(showLoading) app.innerHTML='<p class="empty">กำลังโหลดข้อมูล</p>';
+  try{
+    const doctors=await fetchDoctors();
+    UPDATED_AT=Date.now();
+    try{localStorage.setItem(CACHE_KEY,JSON.stringify({savedAt:UPDATED_AT,doctors}))}catch{}
+    if(JSON.stringify(doctors)!==JSON.stringify(DOCTORS)){DOCTORS=doctors;route()}
+  }catch(e){
+    console.error(e);
+    if(!DOCTORS.length) app.innerHTML=`<p class="empty">ยังโหลดตารางแพทย์ไม่ได้<br><button class="back" onclick="refresh(true)">ลองอีกครั้ง</button></p>`;
+  }
+}
+
+function init(){
+  try{
+    const cached=JSON.parse(localStorage.getItem(CACHE_KEY));
+    if(!Array.isArray(cached.doctors)) throw new Error("bad cache");
+    DOCTORS=cached.doctors;
+    UPDATED_AT=cached.savedAt||0;
+    route();
+  }catch(e){
+    localStorage.removeItem(CACHE_KEY);
+  }
+  refresh(!DOCTORS.length);
+}
+
+async function start(){
+  app.innerHTML='<p class="empty">กำลังโหลดข้อมูล</p>';
+  try{
+    const res=await fetch("config.json");
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const cfg=await res.json();
+    CSV_URL=cfg.csvUrl;
+    DAYS=cfg.dayNames;
+    ORDER=cfg.dayOrder;
+  }catch(e){
+    console.error(e);
+    app.innerHTML=`<p class="empty">ยังโหลดตั้งค่าไม่ได้<br><button class="back" onclick="start()">ลองอีกครั้ง</button></p>`;
+    return;
+  }
+  init();
+}
+window.addEventListener("hashchange",route);
+start();
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
