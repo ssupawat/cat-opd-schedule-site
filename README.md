@@ -46,27 +46,3 @@ python3 -m http.server 8000
 ```
 
 (The page itself is a single file, but the service worker and CSV fetch need an http origin.)
-
-## Test
-
-```bash
-bash test.sh   # 19 checks via agent-browser: render, cache-first paint,
-               # background revalidate, hash routing, PWA, offline reload
-```
-
-## Files
-
-```
-index.html            the whole app (markup, styles, logic)
-config.json           runtime config: CSV link, day names, day order
-manifest.webmanifest  PWA manifest (name, icons, standalone display)
-sw.js                 service worker: app-shell cache
-icon.svg              favicon source (Twemoji cat face on white box)
-icon-maskable.svg     maskable icon source
-icon-*.png            generated icons (192/512/180/maskable-512)
-test.sh               regression suite
-```
-
-## Deploy
-
-Not deployed yet. Any static host over HTTPS works (e.g. GitHub Pages) — HTTPS is what makes the PWA installable.
