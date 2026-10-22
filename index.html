@@ -70,17 +70,28 @@ tr.is-today td.day::after{content:" (วันนี้)";font-weight:500;color:
 .remark{margin-top:16px;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent)}
 .remark h2{margin:0 0 4px;font-size:.9rem;color:var(--muted);font-weight:600}
 .remark p{margin:0;white-space:pre-line}
+.top{display:flex;justify-content:flex-end}
+.top .back{font-size:.9rem;color:var(--muted);font-weight:500}
+form.login{margin-top:24px;display:grid;gap:12px}
+form.login label{display:grid;gap:4px;font-size:.9rem;color:var(--muted)}
+form.login input{font:inherit;font-size:1.05rem;padding:14px 16px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);outline:none}
+form.login input:focus{border-color:var(--accent)}
+form.login button{font:inherit;font-weight:600;font-size:1.05rem;padding:14px 16px;border-radius:14px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+form.login button:disabled{opacity:.6;cursor:default}
+.err{color:#C0392B;margin:0;min-height:1.6em}
+@media (prefers-color-scheme: dark){.err{color:#FF8A7A}}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
 <noscript><div class="wrap"><p class="empty">ต้องเปิดใช้ JavaScript จึงจะดูตารางออกตรวจได้</p></div></noscript>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
-const CACHE_KEY="cat-opd-doctors-v2";
+const CACHE_KEY="cat-opd-doctors-v3";
+const AUTH_KEY="cat-opd-auth-v1";
 
-let CSV_URL, DAYS, ORDER;
+let API_URL, TABLE, DAYS, ORDER;
+let AUTH=null;
 const app = document.getElementById("app");
 const state = {q:"", spec:""};
 let DOCTORS = [];
@@ -113,6 +124,7 @@ function match(d){
 function renderList(){
   const specs=[...new Set(DOCTORS.map(d=>d.spec).filter(Boolean))];
   app.innerHTML = `
+    <div class="top"><button class="back" id="logout">ออกจากระบบ</button></div>
     <h1>ตารางออกตรวจแพทย์</h1>
     <p class="sub">พิมพ์ชื่อแพทย์หรือแผนก แล้วแตะชื่อเพื่อดูตาราง</p>
     <div class="search">
@@ -123,6 +135,7 @@ function renderList(){
       </div>
     </div>
     <div id="results"></div>`;
+  document.getElementById("logout").addEventListener("click",logout);
   document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;renderResults()});
   app.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
     state.spec=b.dataset.spec;
@@ -161,16 +174,74 @@ function renderDoctor(d){
 }
 
 function route(){
+  if(!AUTH) return;
   const d=DOCTORS.find(x=>x.id===location.hash.slice(1));
   if(d) renderDoctor(d); else renderList();
 }
 
+class AuthError extends Error{}
+
+function loadAuth(){
+  try{const a=JSON.parse(localStorage.getItem(AUTH_KEY)); return a&&a.token?a:null}catch{return null}
+}
+
+function clearSession(){
+  AUTH=null; DOCTORS=[]; UPDATED_AT=0;
+  try{localStorage.removeItem(AUTH_KEY);localStorage.removeItem(CACHE_KEY)}catch{}
+}
+
+async function logout(){
+  const token=AUTH&&AUTH.token;
+  clearSession();
+  location.hash="";
+  renderLogin();
+  if(token) try{await fetch(API_URL+"/api/logout",{method:"POST",headers:{Authorization:"Bearer "+token}})}catch{}
+}
+
+function renderLogin(msg){
+  app.innerHTML=`
+    <h1>ตารางออกตรวจแพทย์</h1>
+    <p class="sub">เข้าสู่ระบบเพื่อดูตารางออกตรวจ</p>
+    <form class="login" id="login">
+      <label>ชื่อผู้ใช้<input name="username" autocomplete="username" autocapitalize="none" required></label>
+      <label>รหัสผ่าน<input name="password" type="password" autocomplete="current-password" required></label>
+      <p class="err" role="alert" id="err">${esc(msg||"")}</p>
+      <button type="submit">เข้าสู่ระบบ</button>
+    </form>`;
+  document.getElementById("login").addEventListener("submit",async e=>{
+    e.preventDefault();
+    const f=e.target, btn=f.querySelector("button"), err=document.getElementById("err");
+    btn.disabled=true; err.textContent="";
+    try{
+      const res=await fetch(API_URL+"/api/login",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({username:f.username.value.trim(),password:f.password.value})});
+      if(res.status===401||res.status===400){err.textContent="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";btn.disabled=false;return}
+      if(res.status===429){err.textContent="ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่";btn.disabled=false;return}
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const j=await res.json();
+      AUTH={token:j.token,username:j.username,role:j.role};
+      try{localStorage.setItem(AUTH_KEY,JSON.stringify(AUTH))}catch{}
+      init();
+    }catch(ex){
+      console.error(ex);
+      err.textContent="เข้าสู่ระบบไม่ได้ ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง";
+      btn.disabled=false;
+    }
+  });
+}
+
 async function fetchDoctors(){
-  const res=await fetch(CSV_URL);
-  if(!res.ok) throw new Error("HTTP "+res.status);
-  const text=await res.text();
-  if(text.trimStart().startsWith("<")) throw new Error("ได้ HTML แทน CSV: ตรวจว่า publish ชีตแล้ว");
-  return toDoctors(Papa.parse(text,{header:true,skipEmptyLines:true}).data);
+  const rows=[], limit=1000;
+  for(let offset=0;;offset+=limit){
+    const res=await fetch(`${API_URL}/api/tables/${encodeURIComponent(TABLE)}/rows?limit=${limit}&offset=${offset}`,
+      {headers:{Authorization:"Bearer "+AUTH.token}});
+    if(res.status===401) throw new AuthError("session expired");
+    if(!res.ok) throw new Error("HTTP "+res.status);
+    const page=await res.json();
+    rows.push(...page.rows);
+    if(!page.rows.length||rows.length>=page.total) break;
+  }
+  return toDoctors(rows);
 }
 
 async function refresh(showLoading){
@@ -179,9 +250,10 @@ async function refresh(showLoading){
     const doctors=await fetchDoctors();
     UPDATED_AT=Date.now();
     try{localStorage.setItem(CACHE_KEY,JSON.stringify({savedAt:UPDATED_AT,doctors}))}catch{}
-    if(JSON.stringify(doctors)!==JSON.stringify(DOCTORS)){DOCTORS=doctors;route()}
+    if(showLoading||JSON.stringify(doctors)!==JSON.stringify(DOCTORS)){DOCTORS=doctors;route()}
   }catch(e){
     console.error(e);
+    if(e instanceof AuthError){clearSession();renderLogin("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");return}
     if(!DOCTORS.length) app.innerHTML=`<p class="empty">ยังโหลดตารางแพทย์ไม่ได้<br><button class="back" onclick="refresh(true)">ลองอีกครั้ง</button></p>`;
   }
 }
@@ -194,7 +266,7 @@ function init(){
     UPDATED_AT=cached.savedAt||0;
     route();
   }catch(e){
-    localStorage.removeItem(CACHE_KEY);
+    try{localStorage.removeItem(CACHE_KEY)}catch{}
   }
   refresh(!DOCTORS.length);
 }
@@ -205,7 +277,8 @@ async function start(){
     const res=await fetch("config.json");
     if(!res.ok) throw new Error("HTTP "+res.status);
     const cfg=await res.json();
-    CSV_URL=cfg.csvUrl;
+    API_URL=cfg.apiUrl.replace(/\/$/,"");
+    TABLE=cfg.table;
     DAYS=cfg.dayNames;
     ORDER=cfg.dayOrder;
   }catch(e){
@@ -213,7 +286,8 @@ async function start(){
     app.innerHTML=`<p class="empty">ยังโหลดตั้งค่าไม่ได้<br><button class="back" onclick="start()">ลองอีกครั้ง</button></p>`;
     return;
   }
-  init();
+  AUTH=loadAuth();
+  if(AUTH) init(); else renderLogin();
 }
 window.addEventListener("hashchange",route);
 start();
