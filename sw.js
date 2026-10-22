@@ -1,4 +1,4 @@
-const CACHE = "cat-opd-shell-v2";
+const CACHE = "cat-opd-shell-v3";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -7,7 +7,6 @@ const PRECACHE = [
   "./icon-192.png",
   "./icon-512.png",
   "./icon-maskable-512.png",
-  "https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js",
   "https://fonts.googleapis.com/css2?family=Anuphan:wght@400;500;600;700&display=swap"
 ];
 const MANAGED = ["cdnjs.cloudflare.com", "fonts.googleapis.com", "fonts.gstatic.com"];
@@ -27,7 +26,6 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
-  if (url.hostname === "docs.google.com") return;
   if (!(url.origin === location.origin || MANAGED.includes(url.hostname))) return;
   if (e.request.mode === "navigate") {
     e.respondWith(fetch(e.request).then(r => {

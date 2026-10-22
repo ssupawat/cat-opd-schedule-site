@@ -6,7 +6,8 @@ cd "$(dirname "$0")"
 SESSION="$(agent-browser session id --scope worktree --prefix app-tests)"
 AB=(agent-browser --session "$SESSION")
 PAGE_URL="http://localhost:8000/index.html"
-CACHE_KEY="cat-opd-doctors-v2"
+CACHE_KEY="cat-opd-doctors-v3"
+: "${NORI_USER:?set NORI_USER and NORI_PASS (a viewer login)}" "${NORI_PASS:?}"
 
 TOTAL=0 FAILED=0
 check() { # check <name> <expected> <actual>
@@ -24,6 +25,10 @@ js() { "${AB[@]}" eval --stdin; }   # js <<< 'expression' prints the result valu
 "${AB[@]}" set viewport 1280 800 > /dev/null
 "${AB[@]}" console --clear > /dev/null   # drop stale entries from previous runs
 "${AB[@]}" errors --clear > /dev/null
+check "login form shown when signed out" "true" "$(js <<< "!!document.querySelector('#login')")"
+js <<EOF2 > /dev/null
+const f=document.querySelector('#login');f.username.value='$NORI_USER';f.password.value='$NORI_PASS';f.requestSubmit();
+EOF2
 "${AB[@]}" wait --fn "!!document.querySelector('.list')" --timeout 60000
 
 # ---- TEST 0: site essentials present ----
@@ -37,7 +42,7 @@ check "list rendered" "true" "$(js <<< "document.querySelectorAll('.list li').le
 check "cache populated" "true" "$(js <<< "JSON.parse(localStorage.getItem('$CACHE_KEY')).doctors.length > 0")"
 check "render matches cache" "true" "$(js <<< "document.querySelectorAll('.list li').length === JSON.parse(localStorage.getItem('$CACHE_KEY')).doctors.length")"
 check "updated timestamp shown" "true" "$(js <<< '/อัปเดต/.test(document.querySelector(".count").textContent)')"
-check "config applied" "true" "$(js <<< 'CSV_URL.startsWith("https://docs.google.com/") && DAYS.length === 7 && ORDER.length === 7')"
+check "config applied" "true" "$(js <<< 'API_URL.startsWith("https://") && !!TABLE && DAYS.length === 7 && ORDER.length === 7')"
 
 # ---- TEST 2: reload still renders (cache/network path stays healthy) ----
 "${AB[@]}" reload > /dev/null
