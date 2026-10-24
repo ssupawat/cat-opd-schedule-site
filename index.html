@@ -88,7 +88,14 @@ form.edit input:focus,form.edit textarea:focus{border-color:var(--accent)}
 .btn:disabled{opacity:.6;cursor:default}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
 .top{align-items:center;gap:12px}
-.role{margin-right:auto;font-size:.8rem;color:var(--muted)}
+.role{margin-right:auto;font-size:.85rem;color:var(--muted);text-decoration:none}
+.role:hover{color:var(--accent)}
+dl.info{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:16px 0;padding:14px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+dl.info dt{color:var(--muted);font-size:.9rem}
+dl.info dd{margin:0;font-weight:600}
+h2.sec{margin:28px 0 0;font-size:1.05rem}
+.ok{color:#1E8449;margin:0;min-height:1.6em}
+@media (prefers-color-scheme: dark){.ok{color:#6FD09A}}
 .err{color:#C0392B;margin:0;min-height:1.6em}
 @media (prefers-color-scheme: dark){.err{color:#FF8A7A}}
 </style>
@@ -103,6 +110,7 @@ const AUTH_KEY="cat-opd-auth-v1";
 
 let API_URL, TABLE, DAYS, ORDER;
 let AUTH=null;
+let FORBIDDEN=false;
 const app = document.getElementById("app");
 const state = {q:"", spec:""};
 let DOCTORS = [];
@@ -112,6 +120,8 @@ const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const today = () => new Date().getDay();
 const fmtUpdated = ts => new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short"}).format(ts);
 const norm = s => String(s||"").toLowerCase().replace(/\s+/g,"");
+const topBar = () => `<div class="top"><a class="role" href="#profile">${esc(AUTH.username)} · ${esc(AUTH.role)}</a><button class="back" id="logout">ออกจากระบบ</button></div>`;
+const bindTop = () => document.getElementById("logout").addEventListener("click",logout);
 const canEdit = () => !!AUTH && (AUTH.role==="admin" || AUTH.role==="editor");
 const cell = (r,k) => String(r[k]??"").trim();
 const hashId = s => { let h=5381; for(const c of s) h=(h*33 ^ c.codePointAt(0))>>>0; return "d"+h.toString(16); };
@@ -136,7 +146,7 @@ function match(d){
 function renderList(){
   const specs=[...new Set(DOCTORS.map(d=>d.spec).filter(Boolean))];
   app.innerHTML = `
-    <div class="top"><span class="role">${esc(AUTH.username)} · ${esc(AUTH.role)}</span><button class="back" id="logout">ออกจากระบบ</button></div>
+    ${topBar()}
     <h1>ตารางออกตรวจแพทย์</h1>
     <p class="sub">พิมพ์ชื่อแพทย์หรือแผนก แล้วแตะชื่อเพื่อดูตาราง</p>
     <div class="search">
@@ -148,7 +158,7 @@ function renderList(){
     </div>
     ${canEdit()?'<div class="actions"><a class="btn" href="#new">+ เพิ่มแพทย์</a></div>':""}
     <div id="results"></div>`;
-  document.getElementById("logout").addEventListener("click",logout);
+  bindTop();
   document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;renderResults()});
   app.querySelectorAll(".chip").forEach(b=>b.addEventListener("click",()=>{
     state.spec=b.dataset.spec;
@@ -177,6 +187,7 @@ function renderDoctor(d){
       :'<span class="off">ไม่มีตรวจ</span>'}</td></tr>`;
   }).join("");
   app.innerHTML=`
+    ${topBar()}
     <a class="back" href="#">‹ กลับไปค้นหา</a>
     <div class="head">
       <div><h1>${esc(d.name)}</h1><div class="meta">${esc(d.spec)}</div></div>
@@ -184,12 +195,14 @@ function renderDoctor(d){
     <table><thead><tr><th>วัน</th><th>เวลา</th></tr></thead><tbody>${rows}</tbody></table>
     ${d.note?`<div class="remark"><h2>หมายเหตุ</h2><p>${esc(d.note)}</p></div>`:""}
     ${canEdit()?`<div class="actions"><a class="btn" href="#edit/${d.id}">แก้ไข</a></div>`:""}`;
+  bindTop();
   window.scrollTo(0,0);
 }
 
 function renderForm(d){
   const v=k=>d?esc(cell(d.row,k)):"";
   app.innerHTML=`
+    ${topBar()}
     <a class="back" href="#${d?d.id:""}">‹ ยกเลิก</a>
     <h1>${d?"แก้ไขข้อมูลแพทย์":"เพิ่มแพทย์"}</h1>
     <form class="edit" id="edit">
@@ -204,6 +217,7 @@ function renderForm(d){
         ${d?'<button class="btn danger" type="button" id="del">ลบแพทย์</button>':""}
       </div>
     </form>`;
+  bindTop();
   const form=document.getElementById("edit"), err=document.getElementById("err");
   const base=`/api/tables/${encodeURIComponent(TABLE)}/rows`;
   const run=async(fn,after)=>{
@@ -230,17 +244,66 @@ function renderForm(d){
   window.scrollTo(0,0);
 }
 
+function renderProfile(){
+  app.innerHTML=`
+    ${topBar()}
+    <a class="back" href="#">‹ กลับ</a>
+    <h1>บัญชีของฉัน</h1>
+    <dl class="info">
+      <dt>ชื่อผู้ใช้</dt><dd>${esc(AUTH.username)}</dd>
+      <dt>สิทธิ์</dt><dd>${esc(AUTH.role)}</dd>
+      <dt>เข้าสู่ระบบเมื่อ</dt><dd>${AUTH.loginAt?esc(fmtUpdated(AUTH.loginAt)):"-"}</dd>
+    </dl>
+    <h2 class="sec">เปลี่ยนรหัสผ่าน</h2>
+    <form class="edit" id="pw">
+      <label>รหัสผ่านปัจจุบัน<input name="cur" type="password" autocomplete="current-password" required></label>
+      <label>รหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)<input name="new" type="password" autocomplete="new-password" minlength="8" required></label>
+      <label>ยืนยันรหัสผ่านใหม่<input name="again" type="password" autocomplete="new-password" minlength="8" required></label>
+      <p class="err" role="alert" id="err"></p>
+      <p class="ok" id="ok"></p>
+      <div class="actions"><button class="btn" type="submit">เปลี่ยนรหัสผ่าน</button></div>
+    </form>`;
+  bindTop();
+  const f=document.getElementById("pw"), err=document.getElementById("err"), ok=document.getElementById("ok");
+  f.addEventListener("submit",async e=>{
+    e.preventDefault();
+    err.textContent=""; ok.textContent="";
+    if(f.new.value!==f.again.value){err.textContent="รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน";return}
+    const btn=f.querySelector("button"); btn.disabled=true;
+    try{
+      await api("POST","/api/me/password",{currentPassword:f.cur.value,password:f.new.value});
+      f.reset(); ok.textContent="เปลี่ยนรหัสผ่านแล้ว";
+    }catch(ex){
+      if(ex instanceof AuthError){
+        // 401 may mean a wrong current password, not an expired session: check the session first
+        try{await api("GET","/api/me"); err.textContent="รหัสผ่านปัจจุบันไม่ถูกต้อง"}
+        catch(ex2){
+          if(ex2 instanceof AuthError){clearSession();renderLogin("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");return}
+          err.textContent="เปลี่ยนรหัสผ่านไม่สำเร็จ"
+        }
+      }else{
+        console.error(ex);
+        err.textContent="เปลี่ยนรหัสผ่านไม่สำเร็จ: "+ex.message;
+      }
+    }
+    btn.disabled=false;
+  });
+  window.scrollTo(0,0);
+}
+
 function renderForbidden(){
   app.innerHTML=`
-    <div class="top"><button class="back" id="logout">ออกจากระบบ</button></div>
+    ${topBar()}
     <h1>ตารางออกตรวจแพทย์</h1>
-    <p class="empty">บัญชี ${esc(AUTH.username)} (${esc(AUTH.role)}) ไม่มีสิทธิ์ดูตารางนี้<br>ต้องใช้บัญชี viewer, editor หรือ admin</p>`;
-  document.getElementById("logout").addEventListener("click",logout);
+    <p class="empty">บัญชีนี้ (${esc(AUTH.role)}) ไม่มีสิทธิ์ดูตารางนี้<br>ต้องใช้บัญชี viewer, editor หรือ admin</p>`;
+  bindTop();
 }
 
 function route(){
   if(!AUTH) return;
   const h=location.hash.slice(1);
+  if(h==="profile") return renderProfile();
+  if(FORBIDDEN) return renderForbidden();
   if(canEdit()){
     if(h==="new") return renderForm();
     if(h.startsWith("edit/")){const e=DOCTORS.find(x=>x.id===h.slice(5)); if(e) return renderForm(e)}
@@ -271,7 +334,7 @@ function loadAuth(){
 }
 
 function clearSession(){
-  AUTH=null; DOCTORS=[]; UPDATED_AT=0;
+  AUTH=null; FORBIDDEN=false; DOCTORS=[]; UPDATED_AT=0;
   try{localStorage.removeItem(AUTH_KEY);localStorage.removeItem(CACHE_KEY)}catch{}
 }
 
@@ -304,7 +367,7 @@ function renderLogin(msg){
       if(res.status===429){err.textContent="ลองเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่";btn.disabled=false;return}
       if(!res.ok) throw new Error("HTTP "+res.status);
       const j=await res.json();
-      AUTH={token:j.token,username:j.username,role:j.role};
+      AUTH={token:j.token,username:j.username,role:j.role,loginAt:Date.now()};
       try{localStorage.setItem(AUTH_KEY,JSON.stringify(AUTH))}catch{}
       init();
     }catch(ex){
@@ -329,13 +392,14 @@ async function refresh(showLoading){
   if(showLoading) app.innerHTML='<p class="empty">กำลังโหลดข้อมูล</p>';
   try{
     const doctors=await fetchDoctors();
+    FORBIDDEN=false;
     UPDATED_AT=Date.now();
     try{localStorage.setItem(CACHE_KEY,JSON.stringify({savedAt:UPDATED_AT,doctors}))}catch{}
     if(showLoading||JSON.stringify(doctors)!==JSON.stringify(DOCTORS)){DOCTORS=doctors;route()}
   }catch(e){
     console.error(e);
     if(e instanceof AuthError){clearSession();renderLogin("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");return}
-    if(e instanceof ForbiddenError){DOCTORS=[];try{localStorage.removeItem(CACHE_KEY)}catch{}renderForbidden();return}
+    if(e instanceof ForbiddenError){FORBIDDEN=true;DOCTORS=[];try{localStorage.removeItem(CACHE_KEY)}catch{}route();return}
     if(!DOCTORS.length) app.innerHTML=`<p class="empty">ยังโหลดตารางแพทย์ไม่ได้<br><button class="back" onclick="refresh(true)">ลองอีกครั้ง</button></p>`;
   }
 }
