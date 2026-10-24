@@ -30,6 +30,14 @@ flowchart TD
     I -- no --> K["Keep view / search state"]
 ```
 
+## Test
+
+```bash
+./test.sh   # needs node + playwright; starts a local server, mocks the nori API, no login needed
+```
+
+`test.js` runs the suite in Chromium against a fake nori (login, rows CRUD gated by role, password change), covering viewer, editor and builder.
+
 ## Run
 
 ```bash
