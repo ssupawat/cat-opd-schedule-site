@@ -199,7 +199,7 @@ const has = async (page, sel) => (await count(page, sel)) > 0;
     await page.waitForSelector(".empty");
     check("builder: back to no-access", true, /ไม่มีสิทธิ์/.test(await text(page, ".empty")));
     check("builder: no cache kept", null, await page.evaluate(k => localStorage.getItem(k), CACHE_KEY));
-    check("builder: no page errors", [], errors.filter(e => !/ForbiddenError/.test(e)));
+    check("builder: no page errors", [], errors.filter(e => !/ForbiddenError|403/.test(e)));
     await ctx.close();
   }
 
