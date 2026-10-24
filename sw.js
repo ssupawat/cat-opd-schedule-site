@@ -1,4 +1,4 @@
-const CACHE = "cat-opd-shell-v3";
+const CACHE = "cat-opd-shell-v4";
 const PRECACHE = [
   "./",
   "./index.html",
