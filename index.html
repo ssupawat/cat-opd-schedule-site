@@ -78,6 +78,17 @@ form.login input{font:inherit;font-size:1.05rem;padding:14px 16px;border-radius:
 form.login input:focus{border-color:var(--accent)}
 form.login button{font:inherit;font-weight:600;font-size:1.05rem;padding:14px 16px;border-radius:14px;border:0;background:var(--accent);color:#fff;cursor:pointer}
 form.login button:disabled{opacity:.6;cursor:default}
+form.edit{display:grid;gap:12px;margin-top:16px}
+form.edit label{display:grid;gap:4px;font-size:.9rem;color:var(--muted)}
+form.edit input,form.edit textarea{font:inherit;font-size:1.05rem;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);outline:none}
+form.edit input:focus,form.edit textarea:focus{border-color:var(--accent)}
+.btn{font:inherit;font-weight:600;padding:12px 16px;border-radius:14px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+.btn.ghost{background:none;border:1.5px solid var(--line);color:var(--ink)}
+.btn.danger{background:none;border:1.5px solid #C0392B;color:#C0392B}
+.btn:disabled{opacity:.6;cursor:default}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+.top{align-items:center;gap:12px}
+.role{margin-right:auto;font-size:.8rem;color:var(--muted)}
 .err{color:#C0392B;margin:0;min-height:1.6em}
 @media (prefers-color-scheme: dark){.err{color:#FF8A7A}}
 </style>
@@ -87,7 +98,7 @@ form.login button:disabled{opacity:.6;cursor:default}
 <noscript><div class="wrap"><p class="empty">ต้องเปิดใช้ JavaScript จึงจะดูตารางออกตรวจได้</p></div></noscript>
 
 <script>
-const CACHE_KEY="cat-opd-doctors-v3";
+const CACHE_KEY="cat-opd-doctors-v4";
 const AUTH_KEY="cat-opd-auth-v1";
 
 let API_URL, TABLE, DAYS, ORDER;
@@ -101,6 +112,7 @@ const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const today = () => new Date().getDay();
 const fmtUpdated = ts => new Intl.DateTimeFormat("th-TH",{dateStyle:"medium",timeStyle:"short"}).format(ts);
 const norm = s => String(s||"").toLowerCase().replace(/\s+/g,"");
+const canEdit = () => !!AUTH && (AUTH.role==="admin" || AUTH.role==="editor");
 const cell = (r,k) => String(r[k]??"").trim();
 const hashId = s => { let h=5381; for(const c of s) h=(h*33 ^ c.codePointAt(0))>>>0; return "d"+h.toString(16); };
 
@@ -110,7 +122,7 @@ function toDoctors(rows){
     DAYS.forEach((name,day)=>{
       cell(r,name).split(",").map(t=>t.trim()).filter(Boolean).forEach(time=>schedule.push({day,time}));
     });
-    return {id:hashId(cell(r,"ชื่อ")),name:cell(r,"ชื่อ"),spec:cell(r,"แผนก"),note:cell(r,"หมายเหตุ"),schedule};
+    return {id:hashId(cell(r,"ชื่อ")),rowId:r.id,row:r,name:cell(r,"ชื่อ"),spec:cell(r,"แผนก"),note:cell(r,"หมายเหตุ"),schedule};
   }).filter(d=>d.name);
 }
 
@@ -124,7 +136,7 @@ function match(d){
 function renderList(){
   const specs=[...new Set(DOCTORS.map(d=>d.spec).filter(Boolean))];
   app.innerHTML = `
-    <div class="top"><button class="back" id="logout">ออกจากระบบ</button></div>
+    <div class="top"><span class="role">${esc(AUTH.username)} · ${esc(AUTH.role)}</span><button class="back" id="logout">ออกจากระบบ</button></div>
     <h1>ตารางออกตรวจแพทย์</h1>
     <p class="sub">พิมพ์ชื่อแพทย์หรือแผนก แล้วแตะชื่อเพื่อดูตาราง</p>
     <div class="search">
@@ -134,6 +146,7 @@ function renderList(){
         ${specs.map(s=>`<button class="chip" data-spec="${esc(s)}" aria-pressed="${state.spec===s}">${esc(s)}</button>`).join("")}
       </div>
     </div>
+    ${canEdit()?'<div class="actions"><a class="btn" href="#new">+ เพิ่มแพทย์</a></div>':""}
     <div id="results"></div>`;
   document.getElementById("logout").addEventListener("click",logout);
   document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value;renderResults()});
@@ -169,17 +182,89 @@ function renderDoctor(d){
       <div><h1>${esc(d.name)}</h1><div class="meta">${esc(d.spec)}</div></div>
     </div>
     <table><thead><tr><th>วัน</th><th>เวลา</th></tr></thead><tbody>${rows}</tbody></table>
-    ${d.note?`<div class="remark"><h2>หมายเหตุ</h2><p>${esc(d.note)}</p></div>`:""}`;
+    ${d.note?`<div class="remark"><h2>หมายเหตุ</h2><p>${esc(d.note)}</p></div>`:""}
+    ${canEdit()?`<div class="actions"><a class="btn" href="#edit/${d.id}">แก้ไข</a></div>`:""}`;
   window.scrollTo(0,0);
+}
+
+function renderForm(d){
+  const v=k=>d?esc(cell(d.row,k)):"";
+  app.innerHTML=`
+    <a class="back" href="#${d?d.id:""}">‹ ยกเลิก</a>
+    <h1>${d?"แก้ไขข้อมูลแพทย์":"เพิ่มแพทย์"}</h1>
+    <form class="edit" id="edit">
+      <label>ชื่อ<input name="ชื่อ" value="${v("ชื่อ")}" required></label>
+      <label>แผนก<input name="แผนก" value="${v("แผนก")}"></label>
+      <label>ประเภท<input name="ประเภท" value="${v("ประเภท")}"></label>
+      ${ORDER.map(day=>`<label>${esc(DAYS[day])}<input name="${esc(DAYS[day])}" value="${v(DAYS[day])}" placeholder="คั่นหลายช่วงเวลาด้วย ,"></label>`).join("")}
+      <label>หมายเหตุ<textarea name="หมายเหตุ" rows="3">${v("หมายเหตุ")}</textarea></label>
+      <p class="err" role="alert" id="err"></p>
+      <div class="actions">
+        <button class="btn" type="submit">บันทึก</button>
+        ${d?'<button class="btn danger" type="button" id="del">ลบแพทย์</button>':""}
+      </div>
+    </form>`;
+  const form=document.getElementById("edit"), err=document.getElementById("err");
+  const base=`/api/tables/${encodeURIComponent(TABLE)}/rows`;
+  const run=async(fn,after)=>{
+    form.querySelectorAll("button").forEach(b=>b.disabled=true); err.textContent="";
+    try{await fn(); await refresh(false); location.hash=after()}
+    catch(ex){
+      if(ex instanceof AuthError){clearSession();renderLogin("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");return}
+      console.error(ex);
+      err.textContent=ex instanceof ForbiddenError?"บัญชีนี้ไม่มีสิทธิ์แก้ไขข้อมูล":"บันทึกไม่สำเร็จ: "+ex.message;
+      form.querySelectorAll("button").forEach(b=>b.disabled=false);
+    }
+  };
+  form.addEventListener("submit",e=>{
+    e.preventDefault();
+    const body={};
+    new FormData(form).forEach((val,k)=>body[k]=String(val).trim());
+    run(()=>d?api("PATCH",`${base}/${encodeURIComponent(d.rowId)}`,body):api("POST",base,body),
+        ()=>{const n=DOCTORS.find(x=>x.name===body["ชื่อ"]);return n?n.id:""});
+  });
+  const del=document.getElementById("del");
+  if(del) del.addEventListener("click",()=>{
+    if(confirm(`ลบ ${d.name} ออกจากตาราง?`)) run(()=>api("DELETE",`${base}/${encodeURIComponent(d.rowId)}`),()=>"");
+  });
+  window.scrollTo(0,0);
+}
+
+function renderForbidden(){
+  app.innerHTML=`
+    <div class="top"><button class="back" id="logout">ออกจากระบบ</button></div>
+    <h1>ตารางออกตรวจแพทย์</h1>
+    <p class="empty">บัญชี ${esc(AUTH.username)} (${esc(AUTH.role)}) ไม่มีสิทธิ์ดูตารางนี้<br>ต้องใช้บัญชี viewer, editor หรือ admin</p>`;
+  document.getElementById("logout").addEventListener("click",logout);
 }
 
 function route(){
   if(!AUTH) return;
-  const d=DOCTORS.find(x=>x.id===location.hash.slice(1));
+  const h=location.hash.slice(1);
+  if(canEdit()){
+    if(h==="new") return renderForm();
+    if(h.startsWith("edit/")){const e=DOCTORS.find(x=>x.id===h.slice(5)); if(e) return renderForm(e)}
+  }
+  const d=DOCTORS.find(x=>x.id===h);
   if(d) renderDoctor(d); else renderList();
 }
 
 class AuthError extends Error{}
+class ForbiddenError extends Error{}
+
+async function api(method,path,body){
+  const res=await fetch(API_URL+path,{method,
+    headers:{Authorization:"Bearer "+AUTH.token,...(body?{"Content-Type":"application/json"}:{})},
+    body:body?JSON.stringify(body):undefined});
+  if(res.status===401) throw new AuthError("session expired");
+  if(res.status===403) throw new ForbiddenError("insufficient role");
+  if(!res.ok){
+    let msg="HTTP "+res.status;
+    try{msg=(await res.json()).error||msg}catch{}
+    throw new Error(msg);
+  }
+  return res.json();
+}
 
 function loadAuth(){
   try{const a=JSON.parse(localStorage.getItem(AUTH_KEY)); return a&&a.token?a:null}catch{return null}
@@ -233,11 +318,7 @@ function renderLogin(msg){
 async function fetchDoctors(){
   const rows=[], limit=1000;
   for(let offset=0;;offset+=limit){
-    const res=await fetch(`${API_URL}/api/tables/${encodeURIComponent(TABLE)}/rows?limit=${limit}&offset=${offset}`,
-      {headers:{Authorization:"Bearer "+AUTH.token}});
-    if(res.status===401) throw new AuthError("session expired");
-    if(!res.ok) throw new Error("HTTP "+res.status);
-    const page=await res.json();
+    const page=await api("GET",`/api/tables/${encodeURIComponent(TABLE)}/rows?limit=${limit}&offset=${offset}`);
     rows.push(...page.rows);
     if(!page.rows.length||rows.length>=page.total) break;
   }
@@ -254,6 +335,7 @@ async function refresh(showLoading){
   }catch(e){
     console.error(e);
     if(e instanceof AuthError){clearSession();renderLogin("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");return}
+    if(e instanceof ForbiddenError){DOCTORS=[];try{localStorage.removeItem(CACHE_KEY)}catch{}renderForbidden();return}
     if(!DOCTORS.length) app.innerHTML=`<p class="empty">ยังโหลดตารางแพทย์ไม่ได้<br><button class="back" onclick="refresh(true)">ลองอีกครั้ง</button></p>`;
   }
 }

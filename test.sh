@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 SESSION="$(agent-browser session id --scope worktree --prefix app-tests)"
 AB=(agent-browser --session "$SESSION")
 PAGE_URL="http://localhost:8000/index.html"
-CACHE_KEY="cat-opd-doctors-v3"
+CACHE_KEY="cat-opd-doctors-v4"
 : "${NORI_USER:?set NORI_USER and NORI_PASS (a viewer login)}" "${NORI_PASS:?}"
 
 TOTAL=0 FAILED=0
